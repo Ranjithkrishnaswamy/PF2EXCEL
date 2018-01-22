@@ -1,0 +1,3 @@
+head -1 /home/u0019811/PF2XLS.sh
+#!/QOpenSys/usr/bin/bash
+python3 /home/u0019811/Python1/csv2xlsx.py  $1
