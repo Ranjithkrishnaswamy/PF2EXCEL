@@ -1,0 +1,113 @@
+             PGM        PARM(&LIBL &TABLE &EMAIL)                               
+                                                                                
+   /* Declare variables                   */                                    
+             DCL        VAR(&LIBL)  TYPE(*CHAR) LEN(10)                         
+             DCL        VAR(&TABLE) TYPE(*CHAR) LEN(10)                         
+             DCL        VAR(&LEN)   TYPE(*DEC) LEN(5)                           
+             DCL        VAR(&RUN)   TYPE(*CHAR) LEN(50)                         
+             DCL        VAR(&MSGDTA) TYPE(*CHAR) LEN(256)                       
+             DCL        VAR(&MSGID)  TYPE(*CHAR) LEN(7)                         
+             DCL        VAR(&RESULT)  TYPE(*CHAR) LEN(4)                        
+             DCL        VAR(&EMAIL) TYPE(*CHAR) LEN(40)                         
+             DCL        VAR(&STATUS)  TYPE(*DEC)  LEN(10 0)                     
+             DCL        VAR(&CSV)  TYPE(*CHAR) LEN(50) +                        
+                          VALUE('/home/u0019811/')                              
+             DCL        VAR(&FILE) TYPE(*CHAR) LEN(50) +                        
+                          VALUE('/home/u0019811/xlsxFiles/')                    
+             DCL        VAR(&SH)   TYPE(*CHAR) LEN(40) +                        
+                          VALUE('/home/u0019811/PF2XLS.sh')                     
+             DCL        VAR(&ERROR) TYPE(*LGL)                                  
+                                                                                
+              RMVENVVAR  ENVVAR(QIBM_QSH_CMD_OUTPUT)                            
+              MONMSG     MSGID(CPFA981)                                         
+                                                                                
+              RMVENVVAR  ENVVAR(QIBM_QSH_CMD_ESCAPE_MSG)                        
+              MONMSG     MSGID(CPFA981)                                         
+                                                                                
+              ADDENVVAR  ENVVAR(QIBM_QSH_CMD_OUTPUT) VALUE(NONE)                
+              ADDENVVAR  ENVVAR(QIBM_QSH_CMD_ESCAPE_MSG) VALUE(Y)               
+                                                                                
+             MONMSG     MSGID(CPD0078) EXEC(GOTO CMDLBL(END))                   
+   /* Get length of .CSV location */                                            
+             RTVMSG     MSGID(CPF9897) MSGF(QCPFMSG) MSGDTA(&csv)  +            
+                          MSGLEN(&LEN)                                          
+             CHGVAR     VAR(&csv)  VALUE(%SUBSTRING(&csv 1 &LEN) +              
+                          *TCAT &TABLE *TCAT '.csv')                            
+                                                                                
+   /* Copy to Import File - temp.csv      */                                    
+             CPYTOIMPF  FROMFILE(&LIBL/&TABLE) TOSTMF(&CSV) +                   
+                          MBROPT(*REPLACE) STMFCCSID(*PCASCII) +                
+                          RCDDLM(*CRLF) STRDLM(*NONE) ADDCOLNAM(*SYS)           
+             MONMSG     MSGID(CPF2817 CPF0001) EXEC(SNDPGMMSG +                 
+                          MSG('Copy command error - check library +             
+                          or file name'))                                       
+                                                                                
+   /* Get length of Shell Script location */                                    
+             RTVMSG     MSGID(CPF9897) MSGF(QCPFMSG) MSGDTA(&SH)  +             
+                          MSGLEN(&LEN)                                          
+             CHGVAR     VAR(&RUN) VALUE(%SUBSTRING(&SH 1 &LEN) +                
+                          *BCAT &TABLE)                                         
+                                                                                
+   /* Excel file location                 */                                    
+             RTVMSG     MSGID(CPF9897) MSGF(QCPFMSG) MSGDTA(&FILE) +            
+                          MSGLEN(&LEN)                                          
+             CHGVAR     VAR(&FILE) VALUE(%SUBSTRING(&FILE 1 &LEN) +             
+                          *TCAT &TABLE *TCAT '.XLSX')                           
+                                                                                
+   /* Execute Shell Script */                                                   
+             QSH        CMD(&RUN)                                               
+             MONMSG MSGID(QSH0005 QSH0006 QSH0007) +                            
+                   EXEC(CHGVAR VAR(&ERROR) VALUE('1'))                          
+                                                                                
+             IF         COND(&ERROR = '0') THEN(GOTO CMDLBL(DELLNK))            
+                                                                                
+             RCVMSG MSGTYPE(*LAST) RMV(*YES) MSGDTA(&MSGDTA) +                  
+                    MSGID(&MSGID)                                               
+                                                                                
+             SELECT                                                             
+   /* QSH0005 - ended normally */                                               
+             WHEN COND(&MSGID = 'QSH0005') THEN(DO)                             
+               CHGVAR VAR(&RESULT) VALUE(%SST(&MSGDTA 1 4))                     
+               CHGVAR VAR(&STATUS) VALUE(%BIN(&RESULT))                         
+              ENDDO                                                             
+   /* QSH0006 - ended when it received a signal */                              
+             WHEN COND(&MSGID = 'QSH0006') THEN(DO)                             
+               CHGVAR VAR(&RESULT) VALUE(%SST(&MSGDTA 1 4))                     
+               CHGVAR VAR(&STATUS) VALUE(%BIN(&RESULT))                         
+              ENDDO                                                             
+   /* QSH0007 - ended when it received a signal */                              
+             WHEN COND(&MSGID = 'QSH0007') THEN(DO)                             
+               CHGVAR VAR(&RESULT) VALUE(%SST(&MSGDTA 1 4))                     
+               CHGVAR VAR(&STATUS) VALUE(%BIN(&RESULT))                         
+              ENDDO                                                             
+             ENDSELECT                                                          
+                                                                                
+             IF COND(&STATUS *NE 0) THEN(+                                      
+                SNDPGMMSG MSGID(CPF9897) MSGF(QCPFMSG) +                        
+                MSGDTA('Call to QSHELL ''' || &RUN |< +                         
+                       ''' encountered errors'))                                
+                                                                                
+DELLNK:      DEL        OBJLNK(&CSV)                                            
+             MONMSG     MSGID(CPFA0A9)                                          
+                                                                                
+   /* Send E-mail          */                                                   
+             IF         COND(&EMAIL *NE '  ') THEN(DO)                          
+             SNDSMTPEMM RCP((&EMAIL)) SUBJECT('Excel file from IBM +            
+                          i') NOTE('Excel File from IBM i') +                   
+                          ATTACH((&FILE *EXCEL *BIN))                           
+             MONMSG MSGID(TCP5091 TCP5092 TCP530F)                              
+             RCVMSG MSGTYPE(*LAST) RMV(*YES) MSGDTA(&MSGDTA) +                  
+                    MSGID(&MSGID)                                               
+              IF         COND(&MSGID = 'TCP5091') THEN(DO)                      
+              SNDPGMMSG  MSG('Email Success')                                   
+              ENDDO                                                             
+              IF         COND((&MSGID = 'TCP5092') *OR (&MSGID = +              
+                          'TCP530F')) THEN(DO)                                  
+              SNDPGMMSG  MSG('Email address invalid')                           
+              ENDDO                                                             
+             ENDDO                                                              
+   /* No email Send message    */                                               
+             ELSE       CMD(DO)                                                 
+             SNDPGMMSG  MSG('Email address cannot be blank')                    
+             ENDDO                                                              
+ END:        ENDPGM                                                             

@@ -1,0 +1,8 @@
+/* SOURCE FOR COMMAND PROMPT PF2EXCEL */                                        
+             CMD        PROMPT('PF to Excel')                                   
+             PARM       KWD(LIBL) TYPE(*CHAR) LEN(10) MIN(1) +                  
+                          CHOICE('Library Name') PROMPT(LIBRARY)                
+             PARM       KWD(TABLE) TYPE(*CHAR) LEN(10) MIN(1) +                 
+                          CHOICE('Table Name') PROMPT(TABLE)                    
+             PARM       KWD(EMAIL) TYPE(*CHAR) LEN(40) MIN(1) +                 
+                          PROMPT('Email address')                               
